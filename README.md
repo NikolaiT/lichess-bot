@@ -8,7 +8,8 @@ It makes use of puppeteer to communicate with a chromium browser and to get the 
 
 1. You need a recent version of `npm` and `node` installed on your computer.
 2. Then clone this repo and change into the directory.
-3. compile stockfish or download a binary.
+3. Install dependencies with `npm install`. This will download puppeteer and a local chromium browser (around 120MB)
+3. Compile stockfish or download a binary and remember the path to the stockfish binary.
 4. Modify the settings in the top of `index.js`:
 
 ```js
@@ -28,7 +29,7 @@ Then start the bot by calling it in a command line using this line:
 LICHESS_USER=your_lichess_account LICHESS_PWD=your_lichess_password node index.js
 ```
 
-I hope calling it like this works on windwos. If not, just hardcode the user login and password. If you don't manage to do that, you probably have legitimate reasons to cheat :D
+I hope calling it like this works on Windows. If not, just hardcode the user login and password. If you don't manage to do that, you probably have legitimate reasons to cheat :D
 
 ### Features
 
