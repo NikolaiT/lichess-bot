@@ -23,6 +23,8 @@ const config = {
 };
 ```
 
+*Before you start the bot: * You need to manually login to your cheating account and create a game with the settings you like. The bot will just use the saved settings for creating games.
+
 Then start the bot by calling it in a command line using this line:
 
 ```
