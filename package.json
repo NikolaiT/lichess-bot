@@ -1,0 +1,19 @@
+{
+  "name": "chessbot",
+  "version": "1.0.0",
+  "description": "Play ultrabullet with the help of stockfish on lichess.org",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "lichess",
+    "bot"
+  ],
+  "author": "Nikolai Tschacher",
+  "license": "ISC",
+  "dependencies": {
+    "node-uci": "^1.3.1",
+    "puppeteer": "^1.14.0"
+  }
+}
