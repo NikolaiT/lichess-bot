@@ -2,7 +2,7 @@
 
 This is a little bot playing hyperbullet (30s per game) on lichess.org.
 
-It makes use of puppeteer to communicate with a chromium browser and to get the last moves from the dom. It currently polls the DOM for move updates which is easy to implement but bad design because it's slow.
+It makes use of puppeteer to communicate with a chromium browser and to get the last moves from the dom.
 
 ### Installation
 
@@ -16,10 +16,12 @@ It makes use of puppeteer to communicate with a chromium browser and to get the 
 // by default the bot challenges the player again after the game
 // when the challenge is not accepted, a new game is seeked
 const config = {
+    suggest_only_strongest_move: false, // if true, will only highlight/move the best move
+    only_highlight: false, // if false, will move automatically
     stockfish_binary_path: 'Stockfish/src/stockfish',
     maxGames: 5,
     only_one_game_per_player: false,
-    movetime: [100, 300], // picks a random movetime in ms in this interval
+    movetime: [100, 200], // picks a random movetime in ms in this interval
 };
 ```
 
@@ -36,14 +38,14 @@ I hope calling it like this works on Windows. If not, just hardcode the user log
 ### Features
 
 1. Plays completely autonomous and challenges the opponent until she had enough. Then seeks for a new game.
-2. You can specify the following settings in the `index.js` file in the `config` variable.
-3. Picks a random move suggestion by the engine. Doesn't always play the best move.
+2. Picks a random move suggestion by the engine. Doesn't always play the best move.
+3. You can highlight the engine suggestion instead of playing them automatically by setting `only_highlight` to `true` in the config.
 
 ### Limitations
 
 1. Has problems promoting. Just change the lichess settings to autoqueen to fix that.
-2. Gets detected rather quickly because it's too strong
-3. Improvement: Add a mode to highlight the engine moves instead of playing them automatically. Then you can decide on your own if you want to make the bad bad engine move ;)
+2. Gets detected rather quickly because it's too strong. *fixed*
+3. Improvement: Add a mode to highlight the engine moves instead of playing them automatically. Then you can decide on your own if you want to make the bad bad engine move ;) *done*
 
 ### Why?
 

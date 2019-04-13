@@ -16,12 +16,13 @@ const Engine = uci.Engine;
 // by default the bot challenges the player again after the game
 // when the challenge is not accepted, a new game is seeked
 const config = {
+    suggest_only_strongest_move: false, // if true, will only highlight/move the best move
+    only_highlight: false, // if false, will move automatically
     stockfish_binary_path: 'Stockfish/src/stockfish',
     maxGames: 5,
     only_one_game_per_player: false,
-    movetime: [100, 300], // picks a random movetime in ms in this interval
+    movetime: [100, 200], // picks a random movetime in ms in this interval
 };
-
 
 async function get_fen(page) {
     try {
@@ -47,33 +48,68 @@ async function get_fen(page) {
 // when we play white, (448,448) => (h,1)
 
 async function get_last_move(page) {
+
     return await page.evaluate(() => {
-        var files = [1,2,3,4,5,6,7,8];
-        var ranks = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-        var is_white = document.querySelector('.orientation-white') != null;
+        var MutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === "attributes") {
+                    var files = [1,2,3,4,5,6,7,8];
+                    var ranks = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+                    var is_white = document.querySelector('.orientation-white') != null;
 
-        // first in array is dst, second is src
-        var last_moves = document.querySelectorAll('square.last-move');
+                    // first in array is dst, second is src
+                    var last_moves = document.querySelectorAll('square.last-move');
 
-        if (last_moves.length === 2) {
-            var src = last_moves[1];
-            var dst = last_moves[0];
-            var src_match = src.getAttribute('style').match(/([0-9]+)px, ([0-9]+)px/i);
-            var dst_match = dst.getAttribute('style').match(/([0-9]+)px, ([0-9]+)px/i);
+                    if (last_moves.length === 2) {
+                        var src_match = last_moves[1].getAttribute('style').match(/([0-9]+)px, ([0-9]+)px/i);
+                        var dst_match = last_moves[0].getAttribute('style').match(/([0-9]+)px, ([0-9]+)px/i);
 
-            if (is_white) {
-                files.reverse();
-            } else {
-                ranks.reverse();
-            }
+                        if (is_white) {
+                            files.reverse();
+                        } else {
+                            ranks.reverse();
+                        }
 
-            var src_coords = ranks[src_match[1]/64].toString() + files[src_match[2]/64].toString();
-            var dst_coords = ranks[dst_match[1]/64].toString() + files[dst_match[2]/64].toString();
+                        var src_coords = ranks[src_match[1]/64].toString() + files[src_match[2]/64].toString();
+                        var dst_coords = ranks[dst_match[1]/64].toString() + files[dst_match[2]/64].toString();
 
-            return src_coords + dst_coords;
+                        return src_coords + dst_coords;
+                    }
+                    return false;
+                }
+            });
+        });
+
+        var elements = document.querySelectorAll('square.last-move');
+
+        if (elements.length !== 2) {
+            return false;
+        } else {
+            observer.observe(elements[0], {
+                attributes: true //configure it to listen to attribute changes
+            });
         }
-        return false;
     });
+}
+
+function style_to_move(is_white, last_moves) {
+    var files = [1,2,3,4,5,6,7,8];
+    var ranks = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+    var src_match = last_moves.src.match(/([0-9]+)px, ([0-9]+)px/i);
+    var dst_match = last_moves.dst.match(/([0-9]+)px, ([0-9]+)px/i);
+
+    if (is_white) {
+        files.reverse();
+    } else {
+        ranks.reverse();
+    }
+
+    var src_coords = ranks[src_match[1]/64].toString() + files[src_match[2]/64].toString();
+    var dst_coords = ranks[dst_match[1]/64].toString() + files[dst_match[2]/64].toString();
+
+    return src_coords + dst_coords;
 }
 
 // we have a move in algebraic notation, find out the piece we need to click
@@ -139,26 +175,66 @@ async function get_stockfish_move(engine, fen, moves) {
 
     const result = await engine.go({movetime: random_movetime});
 
-    // do not always take the best move,
-    // randomly select canidates from the info element
-    let candidates = [];
-    for (var obj of result.info) {
-        if (obj.depth > 6) {
-            let move = obj.pv.split(' ')[0];
-            if (!candidates.includes(move)) {
-                candidates.push(move);
+    if (config.suggest_only_strongest_move) {
+        return result.bestmove;
+    } else {
+        // do not always take the best move,
+        // randomly select canidates from the info element
+        let candidates = [];
+        for (var obj of result.info) {
+            if (obj.depth > 6) {
+                let move = obj.pv.split(' ')[0];
+                if (!candidates.includes(move)) {
+                    candidates.push(move);
+                }
             }
         }
+        console.log('Candidate moves: ', candidates);
+        return candidates[Math.floor(Math.random() * candidates.length)];
     }
-
-    console.log('Candidate moves: ', candidates);
-    return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
 function sleep(ms){
     return new Promise(resolve => {
         setTimeout(resolve, ms)
     })
+}
+
+async function move(page, engine, moves_algebraic, white) {
+    let smove = await get_stockfish_move(engine, null, moves_algebraic);
+    console.log('Stockfish suggests', smove);
+    let selectors = get_move_selectors(smove, white);
+    var obj = {
+        src: `piece[style="${selectors.src}"]`,
+        dst: `[style="${selectors.dst}"]`,
+    };
+    if (config.only_highlight) {
+        await page.click(obj.src);
+        await page.waitFor(getRandomInt(45, 50));
+        await page.evaluate((obj) => {
+            document.querySelectorAll('piece').forEach((element) => {
+                element.style.border = '';
+            });
+            document.querySelector(obj.src).style.border = '3px solid #e33';
+            document.querySelector(obj.dst).style.border = '3px solid #e33';
+            //
+            // document.querySelectorAll('piece').forEach((element) => {
+            //     element.classList.remove('check');
+            // });
+            // document.querySelector(obj.src).classList.add('check');
+            // document.querySelector(obj.dst).classList.add('check');
+
+        }, obj);
+    } else {
+        try {
+            await page.click(obj.src);
+            await page.waitFor(getRandomInt(35, 50));
+            await page.click(obj.dst);
+        } catch (e) {
+            console.error('Cannot click that piece. Is user interfering?');
+        }
+        return smove;
+    }
 }
 
 (async () => {
@@ -206,6 +282,7 @@ function sleep(ms){
         var moves_algebraic = [];
         var white = await we_are_white(page);
         var show_info = true;
+        var style_attrs = null;
 
         while (true) {
 
@@ -215,19 +292,37 @@ function sleep(ms){
             }
 
             if (white === true && moves_algebraic.length === 0) {
-                let smove = await get_stockfish_move(engine, null, moves_algebraic);
-                moves_algebraic.push(smove);
-                console.log('Stockfish suggests', smove);
-                let selectors = get_move_selectors(smove, white);
-                // console.log('Translated to style attribute', selectors);
-                await page.click(`piece[style="${selectors.src}"]`);
-                await page.waitFor(60);
-                await page.click(`[style="${selectors.dst}"]`);
+                let smove = await move(page, engine, moves_algebraic, white);
+                if (smove) {
+                    moves_algebraic.push(smove);
+                }
             }
 
-            // poll dom every 50ms for a new move, probably bad design
-            await sleep(getRandomInt(40, 60));
-            last_move = await get_last_move(page);
+            try {
+                await page.waitForSelector('square.last-move');
+                // wait for the next move with different style attribute
+                if (style_attrs) {
+                    // let selector_src = `square.last-move:last-child:not([style="${style_attrs.src}"])`;
+                    // let selector_dst = `square.last-move:first-child:not([style="${style_attrs.dst}"])`;
+                    await page.waitFor((style_attrs) => {
+                        var last_moves = document.querySelectorAll('square.last-move');
+                        return last_moves[1].getAttribute('style') !== style_attrs.src ||
+                            last_moves[0].getAttribute('style') !== style_attrs.dst;
+                    }, {}, style_attrs);
+
+                }
+                style_attrs = await page.evaluate(() => {
+                    var last_moves = document.querySelectorAll('square.last-move');
+                    return {
+                        src: last_moves[1].getAttribute('style'),
+                        dst: last_moves[0].getAttribute('style'),
+                    }
+                });
+                last_move = style_to_move(white, style_attrs);
+            } catch (e) {
+                console.log('Starting a new game :)');
+                break;
+            }
 
             if (last_move && moves_algebraic[moves_algebraic.length - 1] !== last_move) {
                 // handle multiple user friends castling
@@ -250,17 +345,7 @@ function sleep(ms){
                     (!white && moves_algebraic.length % 2 === 1);
 
                 if (our_term) {
-                    let smove = await get_stockfish_move(engine, null, moves_algebraic);
-                    console.log('Stockfish suggests', smove);
-                    let selectors = get_move_selectors(smove, white);
-                    // console.log('Translated to style attribute', selectors);
-                    try {
-                        await page.click(`piece[style="${selectors.src}"]`);
-                        await page.waitFor(getRandomInt(35, 60));
-                        await page.click(`[style="${selectors.dst}"]`);
-                    } catch (e) {
-                        console.error('Cannot click that piece. Is user interfering?');
-                    }
+                    await move(page, engine, moves_algebraic, white);
                 }
 
                 continue;
@@ -296,6 +381,7 @@ function sleep(ms){
                     moves_algebraic = [];
                     white = await we_are_white(page);
                     show_info = true;
+                    style_attrs = null;
                     continue;
                 }
             }
